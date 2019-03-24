@@ -6,7 +6,7 @@ import (
 	"runtime"
 	"time"
 
-	"github.com/go-gl/glfw/v3.2/glfw"
+	"github.com/go-gl/glfw/v3.3/glfw"
 	"github.com/libretro/ludo/core"
 	"github.com/libretro/ludo/input"
 	"github.com/libretro/ludo/menu"
@@ -81,8 +81,8 @@ func main() {
 		gamePath = args[0]
 	}
 
-	if err := glfw.Init(); err != nil {
-		log.Fatalln("failed to initialize glfw:", err)
+	if !glfw.Init() {
+		log.Fatalln("Failed to initialize glfw")
 	}
 	defer glfw.Terminate()
 
