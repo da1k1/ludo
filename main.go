@@ -23,12 +23,13 @@ func init() {
 	runtime.LockOSThread()
 }
 
-func runLoop(vid *video.Video) {
+func runLoop(vid *video.Video, m *menu.Menu) {
 	var currTime, prevTime time.Time
 	for !vid.Window.ShouldClose() {
 		currTime = time.Now()
 		dt := float32(currTime.Sub(prevTime)) / 1000000000
 		glfw.PollEvents()
+		m.ProcessHotkeys()
 		ntf.Process(dt)
 		vid.ResizeViewport()
 		if !state.Global.MenuActive {
@@ -44,12 +45,11 @@ func runLoop(vid *video.Video) {
 			vid.Render()
 		} else {
 			input.Poll()
-			menu.Update(dt)
+			m.Update(dt)
 			vid.Render()
-			menu.Render(dt)
+			m.Render(dt)
 		}
-		input.ProcessActions()
-		menu.RenderNotifications()
+		m.RenderNotifications()
 		glfw.SwapInterval(1)
 		vid.Window.SwapBuffers()
 		prevTime = currTime
@@ -67,13 +67,15 @@ func main() {
 	flag.StringVar(&state.Global.CorePath, "L", "", "Path to the libretro core")
 	flag.BoolVar(&state.Global.Verbose, "v", false, "Verbose logs")
 	flag.StringVar(&GLVersion, "glver", settings.Defaults.GLVersion, "OpenGL version, possible values are 2.0, 2.1, 3.0, 3.1, 3.2, 4.1, 4.2")
-	flag.BoolVar(&state.Global.DeskEnv, "de", false, "Enable menu entries for the desktop environment mode")
+	flag.BoolVar(&state.Global.LudOS, "ludos", false, "Expose the features related to LudOS")
 	flag.Parse()
 	args := flag.Args()
 
 	if GLVersion != settings.Defaults.GLVersion {
 		settings.Current.GLVersion = GLVersion
-		settings.Save()
+		if err := settings.Save(); err != nil {
+			log.Fatalln("Failed to save settings:", err)
+		}
 	}
 
 	var gamePath string
@@ -98,9 +100,9 @@ func main() {
 	m := menu.Init(vid)
 	m.ContextReset()
 
-	core.Init(vid, m)
+	core.Init(vid)
 
-	input.Init(vid, m)
+	input.Init(vid)
 
 	if len(state.Global.CorePath) > 0 {
 		err := core.Load(state.Global.CorePath)
@@ -121,7 +123,7 @@ func main() {
 	// No game running? display the menu
 	state.Global.MenuActive = !state.Global.CoreRunning
 
-	runLoop(vid)
+	runLoop(vid, m)
 
 	// Unload and deinit in the core.
 	core.UnloadGame()

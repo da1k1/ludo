@@ -8,7 +8,7 @@ import (
 	"github.com/go-gl/glfw/v3.3/glfw"
 
 	"github.com/libretro/ludo/audio"
-	"github.com/libretro/ludo/deskenv"
+	"github.com/libretro/ludo/ludos"
 	ntf "github.com/libretro/ludo/notifications"
 	"github.com/libretro/ludo/settings"
 	"github.com/libretro/ludo/state"
@@ -21,17 +21,29 @@ type sceneSettings struct {
 }
 
 // Don't display settings flagged with hide:"always"
-// If we're in Desktop Environment mode, hide settings flagged with hide:"de"
+// If we're in Desktop Environment mode, hide settings flagged with hide:"ludos"
 // If we're in program mode, hide settings flagged with hide:"program"
 func isHidden(f *structs.Field) bool {
 	return f.Tag("hide") == "always" ||
-		(state.Global.DeskEnv && f.Tag("hide") == "de") ||
-		(!state.Global.DeskEnv && f.Tag("hide") == "app")
+		(state.Global.LudOS && f.Tag("hide") == "ludos") ||
+		(!state.Global.LudOS && f.Tag("hide") == "app")
 }
 
 func buildSettings() Scene {
 	var list sceneSettings
 	list.label = "Settings"
+
+	if state.Global.LudOS {
+		list.children = append(list.children, entry{
+			label:       "Wi-Fi",
+			icon:        "subsetting",
+			stringValue: func() string { return ludos.CurrentNetwork.SSID },
+			callbackOK: func() {
+				list.segueNext()
+				menu.Push(buildWiFi())
+			},
+		})
+	}
 
 	fields := structs.Fields(&settings.Current)
 	for _, f := range fields {
@@ -53,7 +65,7 @@ func buildSettings() Scene {
 				widget: widgets[f.Tag("widget")],
 				callbackOK: func() {
 					list.segueNext()
-					menu.stack = append(menu.stack, buildExplorer(
+					menu.Push(buildExplorer(
 						f.Value().(string),
 						nil,
 						func(path string) { dirExplorerCb(path, f) },
@@ -135,9 +147,9 @@ var widgets = map[string]func(*entry){
 		if state.Global.CoreRunning {
 			c = video.Color{R: 1, G: 1, B: 1, A: e.iconAlpha}
 		}
-		vid.DrawRoundedRect(x, y, w, h, 0.9, video.Color{R: c.R, G: c.G, B: c.B, A: e.iconAlpha / 4})
+		vid.DrawRect(x, y, w, h, 0.9, video.Color{R: c.R, G: c.G, B: c.B, A: e.iconAlpha / 4})
 		w = 175 * menu.ratio * e.value().(float32)
-		vid.DrawRoundedRect(x, y, w, h, 0.9, c)
+		vid.DrawRect(x, y, w, h, 0.9, c)
 		vid.DrawCircle(x+w, y+4*menu.ratio, 38*menu.ratio, c)
 	},
 }
@@ -169,7 +181,7 @@ var incrCallbacks = map[string]callbackIncrement{
 		settings.Save()
 	},
 	"VideoFilter": func(f *structs.Field, direction int) {
-		filters := []string{"nearest", "linear", "sharp-bilinear"}
+		filters := []string{"nearest", "linear", "sharp-bilinear", "zfast-crt"}
 		v := f.Value().(string)
 		i := utils.IndexOfString(v, filters)
 		i += direction
@@ -202,9 +214,9 @@ var incrCallbacks = map[string]callbackIncrement{
 		f.Set(v)
 		settings.Save()
 	},
-	"SSHService":       deskenv.ServiceSettingIncrCallback,
-	"SambaService":     deskenv.ServiceSettingIncrCallback,
-	"BluetoothService": deskenv.ServiceSettingIncrCallback,
+	"SSHService":       ludos.ServiceSettingIncrCallback,
+	"SambaService":     ludos.ServiceSettingIncrCallback,
+	"BluetoothService": ludos.ServiceSettingIncrCallback,
 }
 
 // Generic stuff
@@ -235,8 +247,7 @@ func (s *sceneSettings) render() {
 
 func (s *sceneSettings) drawHintBar() {
 	w, h := vid.Window.GetFramebufferSize()
-	menu.ratio = float32(w) / 1920
-	vid.DrawRect(0.0, float32(h)-70*menu.ratio, float32(w), 70*menu.ratio, 1.0, video.Color{R: 0.75, G: 0.75, B: 0.75, A: 1})
+	vid.DrawRect(0, float32(h)-70*menu.ratio, float32(w), 70*menu.ratio, 0, video.Color{R: 0.75, G: 0.75, B: 0.75, A: 1})
 
 	var stack float32
 	if state.Global.CoreRunning {

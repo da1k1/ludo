@@ -31,7 +31,7 @@ func buildTabs() Scene {
 		subLabel: "Load cores and games manually",
 		icon:     "main",
 		callbackOK: func() {
-			menu.stack = append(menu.stack, buildMainMenu())
+			menu.Push(buildMainMenu())
 		},
 	})
 
@@ -40,7 +40,7 @@ func buildTabs() Scene {
 		subLabel: "Configure Ludo",
 		icon:     "setting",
 		callbackOK: func() {
-			menu.stack = append(menu.stack, buildSettings())
+			menu.Push(buildSettings())
 		},
 	})
 
@@ -52,7 +52,7 @@ func buildTabs() Scene {
 		icon:     "add",
 		callbackOK: func() {
 			usr, _ := user.Current()
-			menu.stack = append(menu.stack, buildExplorer(usr.HomeDir, nil,
+			menu.Push(buildExplorer(usr.HomeDir, nil,
 				func(path string) {
 					scanner.ScanDir(path, refreshTabs)
 				},
@@ -109,8 +109,8 @@ func refreshTabs() {
 	if len(menu.stack) == 1 {
 		menu.scroll = float32(e.ptr * 128)
 	} else {
-		e.children[e.ptr].width = 5200
-		menu.scroll = float32(e.ptr*128 + 3030)
+		e.children[e.ptr].margin = 1360
+		menu.scroll = float32(e.ptr*128 + 680)
 	}
 }
 
@@ -137,7 +137,7 @@ func getPlaylists() []entry {
 			subLabel: fmt.Sprintf("%d Games - 0 Favorites", count),
 			icon:     filename,
 			callbackOK: func() {
-				menu.stack = append(menu.stack, buildPlaylist(path))
+				menu.Push(buildPlaylist(path))
 			},
 		})
 	}
@@ -210,41 +210,41 @@ func (tabs *sceneTags) animate() {
 		menu.tweens[&e.iconAlpha] = gween.New(e.iconAlpha, iconAlpha, 0.15, ease.OutSine)
 		menu.tweens[&e.scale] = gween.New(e.scale, scale, 0.15, ease.OutSine)
 		menu.tweens[&e.width] = gween.New(e.width, width, 0.15, ease.OutSine)
+		menu.tweens[&e.margin] = gween.New(e.margin, 0, 0.15, ease.OutSine)
 	}
 	menu.tweens[&menu.scroll] = gween.New(menu.scroll, float32(tabs.ptr*128), 0.15, ease.OutSine)
 }
 
 func (tabs *sceneTags) segueNext() {
 	cur := &tabs.children[tabs.ptr]
-	menu.tweens[&cur.width] = gween.New(cur.width, 5200, 0.15, ease.OutSine)
-	menu.tweens[&menu.scroll] = gween.New(menu.scroll, menu.scroll+3030, 0.15, ease.OutSine)
+	menu.tweens[&cur.margin] = gween.New(cur.margin, 1360, 0.15, ease.OutSine)
+	menu.tweens[&menu.scroll] = gween.New(menu.scroll, menu.scroll+680, 0.15, ease.OutSine)
+	for i := range tabs.children {
+		e := &tabs.children[i]
+		if i != tabs.ptr {
+			menu.tweens[&e.iconAlpha] = gween.New(e.iconAlpha, 0, 0.15, ease.OutSine)
+		}
+	}
 }
 
 func (tabs *sceneTags) update(dt float32) {
-	menu.inputCooldown -= dt
-	if menu.inputCooldown < 0 {
-		menu.inputCooldown = 0
-	}
-
 	// Right
-	if input.NewState[0][libretro.DeviceIDJoypadRight] && menu.inputCooldown == 0 {
+	repeatRight(dt, input.NewState[0][libretro.DeviceIDJoypadRight], func() {
 		tabs.ptr++
 		if tabs.ptr >= len(tabs.children) {
 			tabs.ptr = 0
 		}
 		tabs.animate()
-		menu.inputCooldown = 0.15
-	}
+	})
 
 	// Left
-	if input.NewState[0][libretro.DeviceIDJoypadLeft] && menu.inputCooldown == 0 {
+	repeatLeft(dt, input.NewState[0][libretro.DeviceIDJoypadLeft], func() {
 		tabs.ptr--
 		if tabs.ptr < 0 {
 			tabs.ptr = len(tabs.children) - 1
 		}
 		tabs.animate()
-		menu.inputCooldown = 0.15
-	}
+	})
 
 	// OK
 	if input.Released[0][libretro.DeviceIDJoypadA] {
@@ -263,9 +263,9 @@ func (tabs sceneTags) render() {
 
 		c := colorful.Hcl(float64(i)*20, 0.5, 0.5)
 
-		stackWidth += e.width * menu.ratio
+		x := -menu.scroll*menu.ratio + stackWidth + e.width/2*menu.ratio
 
-		x := -menu.scroll*menu.ratio + stackWidth - e.width/2*menu.ratio
+		stackWidth += e.width*menu.ratio + e.margin*menu.ratio
 
 		if e.labelAlpha > 0 {
 			vid.Font.SetColor(float32(c.R), float32(c.B), float32(c.G), e.labelAlpha)
@@ -287,8 +287,7 @@ func (tabs sceneTags) render() {
 
 func (tabs sceneTags) drawHintBar() {
 	w, h := vid.Window.GetFramebufferSize()
-	menu.ratio = float32(w) / 1920
-	vid.DrawRect(0.0, float32(h)-70*menu.ratio, float32(w), 70*menu.ratio, 1.0, video.Color{R: 0.75, G: 0.75, B: 0.75, A: 1})
+	vid.DrawRect(0, float32(h)-70*menu.ratio, float32(w), 70*menu.ratio, 0, video.Color{R: 0.75, G: 0.75, B: 0.75, A: 1})
 
 	var stack float32
 	if state.Global.CoreRunning {
